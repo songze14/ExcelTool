@@ -140,13 +140,8 @@ namespace Yee.Tools
                                 {
                                     value = celldata;
                                 }
-
-
-
                                 sheel.Cells[datacol, i + 1].Value = value.ToString();
                             }
-
-
                         }
                         catch (Exception)
                         {
