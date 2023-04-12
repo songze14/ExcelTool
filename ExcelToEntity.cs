@@ -1,6 +1,8 @@
 ﻿using OfficeOpenXml;
+using OfficeOpenXml.Style;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -15,7 +17,9 @@ namespace Yee.Tools
 
         private static ExcelWorksheet worksheet;
         private static List<PropertyInfo> excelproperlist;
-        private static List< PropertyInfo> properlists;
+        private static List<PropertyInfo> properlists;
+        private static string[] truevaluestr = { "是", "能", "可以", "1", "完成" };
+        private static string[] falsevaluestr = { "否", "不能", "不可以", "0", "未完成" };
         /// <summary>
         /// 工作区转集合
         /// </summary>
@@ -39,6 +43,7 @@ namespace Yee.Tools
                 ExcelPackage package = new ExcelPackage(filestream);
                 //获取sheet表
                 ExcelWorksheets worksheets = package.Workbook.Worksheets;
+                worksheetindex = worksheetindex - 1;
                 worksheet = worksheets[worksheetindex];
 
                 if (endrow == 0)
@@ -49,19 +54,19 @@ namespace Yee.Tools
                 var ty = typeof(T);
                 properlists = new List<PropertyInfo>();
                 GetAllAttribute(ty);
-                  //查询带有excel特性的属性
-                  excelproperlist = properlists.Where(o => o.GetCustomAttributesData().Where(o => o.AttributeType == typeof(ExcelToEntityAttribute)).Count() > 0).ToList();
+                //查询带有excel特性的属性
+                excelproperlist = properlists.Where(o => o.GetCustomAttributesData().Where(o => o.AttributeType == typeof(ExcelToEntityAttribute)).Count() > 0).ToList();
                 var requestlist = new List<T>();
                 //如果开始列为0,则使用类中的特性
                 if (opencol != 0)
                 {
-                    FillList( openrow, opencol, endrow, endcol,in requestlist);
+                    FillList(openrow, opencol, endrow, endcol, in requestlist);
                 }
                 else
                 {
                     //取类上的自定义特性
-                   var classattris = excelproperlist.Select(o => o.GetCustomAttribute<ExcelToEntityAttribute>()).ToList();
-                    FillList(openrow, opencol, endrow, classattris.Count,in requestlist, classattris);
+                    var classattris = excelproperlist.Select(o => o.GetCustomAttribute<ExcelToEntityAttribute>()).ToList();
+                    FillList(openrow, opencol, endrow, classattris.Count, in requestlist, classattris);
 
 
                 }
@@ -83,67 +88,85 @@ namespace Yee.Tools
         /// <param name="excelWorkbook">excel表格对象</param>
         /// <param name="data">需要写入表格的数据</param>
         /// <returns></returns>
-       public static ExcelPackage ListToExcek<T>(ExcelPackage excelPack ,string sheelname, IEnumerable<T> data )
+        public static ExcelPackage ListToExcek<T>(ExcelPackage excelPack, string sheelname, int openrow, IEnumerable<T> data)
         {
             try
             {
-                
+
                 var sheel = excelPack.Workbook.Worksheets.Add(sheelname);
                 var ty = typeof(T);
                 var properlist = ty.GetProperties();
                 //查询带有excel特性的属性
-                var excelproperlist = properlist.Where(o => o.GetCustomAttributesData().Where(o => o.AttributeType == typeof(EntityToexcelAttribute)).Count() ==1).ToList();
-              
+                var excelproperlist = properlist.Where(o => o.GetCustomAttributesData().Where(o => o.AttributeType == typeof(EntityToexcelAttribute)).Count() == 1).ToList();
+
                 //取类上的自定义特性
 
-               var classattri= excelproperlist.Select(o => ty.GetProperty(o.Name).GetCustomAttribute<EntityToexcelAttribute>()).OrderBy(o => o.Idx).ToList();
-                int datacol = 2;
+                var classattri = excelproperlist.Select(o => ty.GetProperty(o.Name).GetCustomAttribute<EntityToexcelAttribute>()).OrderBy(o => o.Idx).ToList();
+                int datacol = openrow + 1;
                 //加入表头
                 for (int i = 0; i < classattri.Count; i++)
                 {
-                    sheel.Cells[1, i + 1].Value = classattri[i].Colname;
+                    sheel.Cells[openrow, i + 1].Value = classattri[i].Colname;
                 }
 
                 var dd = excelproperlist[0];
-              
-                    var ss = dd.CustomAttributes.Where(o => o.ConstructorArguments[1].Value.ToString() == classattri[0].Colname) ;
-                
+
+                var ss = dd.CustomAttributes.Where(o => o.AttributeType == typeof(EntityToexcelAttribute)).FirstOrDefault();
+
                 //根据list集合数据,填充excel
                 foreach (var item in data)
                 {
-                    if (item==null)
+                    if (item == null)
                     {
                         datacol++;
                         continue;
                     }
                     for (int i = 0; i < classattri.Count; i++)
                     {
-                        var proper = excelproperlist.Where(o => o.CustomAttributes.Where(o =>Convert.ToUInt32( o.ConstructorArguments[1].Value) == classattri[i].Idx).Count()>0).FirstOrDefault();
+
+                        var proper = excelproperlist.Where(o => Convert.ToInt32(o.CustomAttributes.Where(o => o.AttributeType == typeof(EntityToexcelAttribute)).FirstOrDefault().ConstructorArguments[1].Value) == classattri[i].Idx).FirstOrDefault();
                         try
                         {
                             //读取出错,加入空值
                             var celldata = proper.GetValue(item);
-                            
-                             sheel.Cells[datacol, i + 1].Value = celldata;
-                            
+                            object value = null;
+                            if (celldata != null)
+                            {
+                                if (celldata.GetType() == typeof(bool))
+                                {
+                                    value = Convert.ToInt32(celldata);
+                                }
+                                else
+                                {
+                                    value = celldata;
+                                }
+
+
+
+                                sheel.Cells[datacol, i + 1].Value = value.ToString();
+                            }
+
+
                         }
                         catch (Exception)
                         {
 
                             sheel.Cells[datacol, i + 1].Value = "";
                         }
-                        
-                        
+
+
 
                     }
                     datacol++;
                 }
-               
+                sheel.Cells[sheel.Dimension.Address].AutoFitColumns();
+                sheel.Cells[sheel.Dimension.Address].Style.Border.BorderAround(ExcelBorderStyle.Thin, Color.FromArgb(191, 191, 191));
+
             }
             catch (Exception ex)
             {
 
-                
+
             }
             return excelPack;
         }
@@ -158,16 +181,16 @@ namespace Yee.Tools
         /// <param name="requestlist">返回的数据集合</param>
         /// <param name="classattris">目标类型中自定义特性集合</param>
         /// <exception cref="Exception"></exception>
-        #nullable enable
-        private static void FillList<T>( int openrow, int opencol,int endrow, int endcol, in List<T> requestlist, List<ExcelToEntityAttribute>? classattris=null)
+#nullable enable
+        private static void FillList<T>(int openrow, int opencol, int endrow, int endcol, in List<T> requestlist, List<ExcelToEntityAttribute>? classattris = null)
         {
-            
+
             //行
             for (int i = openrow; i <= endrow; i++)
             {
                 var good = Activator.CreateInstance<T>();
                 //列
-                for (int j =0; j < endcol; j++)
+                for (int j = 0; j < endcol; j++)
                 {
                     try
                     {
@@ -190,7 +213,7 @@ namespace Yee.Tools
                         {
                             value = worksheet.Cells[new ExcelAddress(range).Start.Row, new ExcelAddress(range).Start.Column].Value;
                         }
-                        if (value==null || string.IsNullOrWhiteSpace(value.ToString()))
+                        if (value == null || string.IsNullOrWhiteSpace(value.ToString()))
                         {
                             continue;
                         }
@@ -210,11 +233,24 @@ namespace Yee.Tools
                             {
                                 excelproperlist[j].SetValue(good, null);
                             }
-                            else if (genericTypes.Where(o=>o.IsEnum).Count()>0)
+                            else if (genericTypes.Where(o => o.IsEnum).Count() > 0)
                             {
                                 if (!Enum.TryParse(genericTypes[0], value.ToString(), out value))
                                 {
                                     throw new Exception("枚举数据无法转移");
+                                }
+                            }
+                            else if (genericTypes.Where(o => o == typeof(bool)).Count() > 0)
+                            {
+                                ///boolean值单独处理，符合条件赋值
+                                var valuestr = value.ToString();
+                                if (truevaluestr.Contains(valuestr))
+                                {
+                                    value = true;
+                                }
+                                else if (falsevaluestr.Contains(valuestr))
+                                {
+                                    value = false;
                                 }
                             }
                             else
@@ -222,8 +258,28 @@ namespace Yee.Tools
                                 value = Convert.ChangeType(value, valueType.GetGenericArguments()[0]);
                             }
                         }
+                        else if (valueType.Name == "DateTime")
+                        {
+                            if (value is double)
+                            {
+                                value = DateTime.FromOADate((double)value);
+                            }
+                        }
                         else
                         {
+                            if (valueType == typeof(bool))
+                            {
+                                ///boolean值单独处理，符合条件赋值
+                                var valuestr = value.ToString();
+                                if (truevaluestr.Contains(valuestr))
+                                {
+                                    value = true;
+                                }
+                                if (falsevaluestr.Contains(valuestr))
+                                {
+                                    value = false;
+                                }
+                            }
                             value = Convert.ChangeType(value, valueType);
                         }
                         if (value != null)
@@ -238,12 +294,12 @@ namespace Yee.Tools
 
                         throw new Exception($"转换excel出错{ex.Message} ;出错行 {i} :出错列{excelproperlist[j].Name}");
                     }
-                   
+
                 }
                 requestlist.Add(good);
 
             }
-         
+
         }
         /// <summary>
         /// 获取目标类型信息中全部自定义特性
@@ -251,13 +307,13 @@ namespace Yee.Tools
         /// <param name="infos">目标信息</param>
         private static void GetAllAttribute(Type type)
         {
-         
+
             var properlist = type.GetProperties();
             foreach (var item in properlist)
             {
 
                 var itemty = item.PropertyType;
-                if (itemty.Namespace!=null&&!itemty.Namespace.Contains("System"))
+                if (itemty.Namespace != null && !itemty.Namespace.Contains("System"))
                 {
                     GetAllAttribute(itemty);
                 }
@@ -270,7 +326,7 @@ namespace Yee.Tools
                     var tys = itemty.GenericTypeArguments;
                     foreach (var ty in tys)
                     {
-                       
+
                         //判断是否为用户自定义类型
                         if (ty.Namespace != null && !ty.Namespace.Contains("System"))
                         {

@@ -4,7 +4,7 @@ using System.Text;
 
 namespace AnalysisClass
 {
-    public class FatherClass : Perple
+    internal class FatherClass : Perple
     {
         //public string ddd { get; set; }
         public string Fathername { get; set; }
@@ -13,11 +13,11 @@ namespace AnalysisClass
 
     }
 
-    public class ChildrenClass : Perple
+    internal class ChildrenClass : Perple
     {
         public string Childrenname { get; set; }
     }
-    public class Perple
+    internal class Perple
     {
         public int age { get; set; }
     }
