@@ -7,7 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 
-namespace Yee.Tools
+namespace Excel.Tool
 {
     /// <summary>
     /// Excel转位实体类 实体类需要加入ExcelToEntity特性
